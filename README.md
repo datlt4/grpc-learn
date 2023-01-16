@@ -80,4 +80,21 @@ WORKDIR /root
 
 </details>
 
-### Example
+### C++
+
+```bash
+find . -name "*.proto" -type f -exec protoc -I=./protoc --cpp_out=./protoc {} \;
+find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --plugin=protoc-gen-grpc=`which grpc_cpp_plugin` {} \;
+```
+
+```bash
+sudo apt-get install clang-format
+clang-format -style=microsoft -dump-config > .clang-format
+find . -regex '.*\.\(cpp\|hpp\|cu\|c\|h\)' -exec clang-format -style=file -i {} \;
+```
+
+### Python
+
+```bash
+find . -name "*.proto" -type f -exec protoc -I=./protoc --python_out=./protoc {} \;
+```

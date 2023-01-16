@@ -3,9 +3,31 @@ cmake_minimum_required(VERSION 3.10.2)
 project(network LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 
-# Add sources
+# Find Protobuf installation
+# Find package
+set(protobuf_MODULE_COMPATIBLE TRUE)
+find_package(Protobuf REQUIRED)
+set(INC ${INC} ${PROTOBUF_INCLUDE_DIR})
+set(LIB ${LIB} ${PROTOBUF_LIBRARIES})
+
+# Find gRPC installation
+# Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
+find_package(gRPC CONFIG REQUIRED)
+message(STATUS "Using gRPC ${gRPC_VERSION}")
+set(LIB ${LIB} gRPC::grpc++_reflection)
+set(LIB ${LIB} gRPC::grpc++)
+
+
+set(INC ${INC} "${CMAKE_CURRENT_SOURCE_DIR}/../../protoc/")
+file(GLOB PROTO_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/../../protoc/*.cc")
+set(SRC ${SRC} ${PROTO_SRCS})
+
+message(STATUS "INC ${INC}")
+message(STATUS "LIB ${LIB}")
+
 set(APP greeter)
-add_executable(${APP}_server ${APP}_server.cpp)
-target_include_directories(${APP}_server PRIVATE ${INC})
-target_link_libraries(${APP}_server PRIVATE ${LIB})
+add_executable(${APP} ${APP}.cpp)
+target_sources(${APP} PRIVATE ${SRC})
+target_include_directories(${APP} PRIVATE ${INC})
+target_link_libraries(${APP} PRIVATE ${LIB})
 unset(APP)

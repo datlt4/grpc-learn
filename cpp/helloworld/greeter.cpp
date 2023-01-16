@@ -30,19 +30,6 @@
 // For both
 #include "helloworld.grpc.pb.h"
 
-// // For server
-// using grpc::Server;
-// using grpc::ServerBuilder;
-// using grpc::ServerContext;
-// // For client
-// using grpc::Channel;
-// using grpc::ClientContext;
-// // For both
-// using grpc::Status;
-// using helloworld::Greeter;
-// using helloworld::HelloReply;
-// using helloworld::HelloRequest;
-
 // For server
 // Logic and data behind the server's behavior.
 class GreeterServiceImpl final : public helloworld::Greeter::Service
@@ -224,9 +211,12 @@ int main(int argc, char **argv)
         if (mode == Mode::CLIENT)
         {
             GreeterClient greeter(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
+            std::cout << __LINE__ << std::endl;
             std::string user("world");
             std::string reply = greeter.SayHello(user);
+            std::cout << __LINE__ << std::endl;
             std::cout << "Greeter received: " << reply << std::endl;
+            std::cout << __LINE__ << std::endl;
         }
         else // SERVER
         {

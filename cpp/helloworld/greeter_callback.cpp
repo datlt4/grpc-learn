@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2021 gRPC authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,37 +16,38 @@
  *
  */
 
+#include <condition_variable>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <string>
-#include <chrono>
-#include <thread>
 
-// For server
+// For Server
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
-// For client
+// For Client
 #include <grpcpp/grpcpp.h>
 // For both
 #include "helloworld.grpc.pb.h"
 #include "utils.h"
 
-// For server
+// For Server
 // Logic and data behind the server's behavior.
-class GreeterServiceImpl final : public helloworld::Greeter::Service
+class GreeterServiceImpl final : public helloworld::Greeter::CallbackService
 {
   private:
     int i = 0;
-    grpc::Status SayHello(grpc::ServerContext *context, const helloworld::HelloRequest *request,
-                          helloworld::HelloReply *reply) override
+    grpc::ServerUnaryReactor *SayHello(grpc::CallbackServerContext *context, const helloworld::HelloRequest *request,
+                                       helloworld::HelloReply *reply) override
     {
         std::cout << "--" << std::endl;
         std::string prefix("Hello ");
-        std::this_thread::sleep_for(std::chrono::milliseconds(2806));
         reply->set_message(prefix + request->name());
         reply->set_order(++i);
-        return grpc::Status::OK;
+        grpc::ServerUnaryReactor *reactor = context->DefaultReactor();
+        reactor->Finish(grpc::Status::OK);
+        return reactor;
     }
 };
 
@@ -71,7 +72,7 @@ void RunServer(std::string &server_address)
     server->Wait();
 }
 
-// For client
+// For Client
 class GreeterClient
 {
   public:
@@ -95,14 +96,27 @@ class GreeterClient
         grpc::ClientContext context;
 
         // The actual RPC.
-        grpc::Status status = stub_->SayHello(&context, request, &reply);
+        std::mutex mu;
+        std::condition_variable cv;
+        bool done = false;
+        grpc::Status status;
+        stub_->async()->SayHello(&context, &request, &reply, [&mu, &cv, &done, &status](grpc::Status s) {
+            status = std::move(s);
+            std::lock_guard<std::mutex> lock(mu);
+            done = true;
+            cv.notify_one();
+        });
+
+        std::unique_lock<std::mutex> lock(mu);
+        while (!done)
+        {
+            cv.wait(lock);
+        }
 
         // Act upon its status.
         if (status.ok())
         {
-            std::ostringstream oss;
-            oss << "[ " << reply.order() << " ] " << reply.message();
-            return oss.str();
+            return reply.message();
         }
         else
         {
@@ -115,31 +129,11 @@ class GreeterClient
     std::unique_ptr<helloworld::Greeter::Stub> stub_;
 };
 
-
+// For both
 int main(int argc, char **argv)
 {
     std::string server_address{"0.0.0.0:50051"};
-    Mode mode{Mode::CLIENT};
-    ParseCLIState cliState = ParseCommandLine(argc, argv, server_address, mode);
-    if (cliState == ParseCLIState::SUCCESS)
-    {
+    RunServer(server_address);
 
-        if (mode == Mode::CLIENT)
-        {
-            GreeterClient greeter(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
-            std::string user("world");
-            std::string reply = greeter.SayHello(user);
-            std::cout << "Greeter received: " << reply << std::endl;
-        }
-        else // SERVER
-        {
-            RunServer(server_address);
-        }
-
-        return 0;
-    }
-    else if (cliState == ParseCLIState::SHOW_HELP)
-        return 0;
-    else
-        return 1;
+    return 0;
 }

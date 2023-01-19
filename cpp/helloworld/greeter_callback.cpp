@@ -29,8 +29,8 @@
 // For Client
 #include <grpcpp/grpcpp.h>
 // For both
+#include "common/utils.h"
 #include "helloworld.grpc.pb.h"
-#include "utils.h"
 
 // For Server
 // Logic and data behind the server's behavior.
@@ -116,7 +116,9 @@ class GreeterClient
         // Act upon its status.
         if (status.ok())
         {
-            return reply.message();
+            std::ostringstream oss;
+            oss << "[ " << reply.order() << " ] " << reply.message();
+            return oss.str();
         }
         else
         {
@@ -133,7 +135,27 @@ class GreeterClient
 int main(int argc, char **argv)
 {
     std::string server_address{"0.0.0.0:50051"};
-    RunServer(server_address);
+    Mode mode{Mode::CLIENT};
+    ParseCLIState cliState = ParseCommandLine(argc, argv, server_address, mode);
+    if (cliState == ParseCLIState::SUCCESS)
+    {
 
-    return 0;
+        if (mode == Mode::CLIENT)
+        {
+            GreeterClient greeter(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
+            std::string user("world");
+            std::string reply = greeter.SayHello(user);
+            std::cout << "Greeter received: " << reply << std::endl;
+        }
+        else // SERVER
+        {
+            RunServer(server_address);
+        }
+
+        return 0;
+    }
+    else if (cliState == ParseCLIState::SHOW_HELP)
+        return 0;
+    else
+        return 1;
 }

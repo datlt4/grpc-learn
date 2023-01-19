@@ -30,7 +30,7 @@
 #include <grpcpp/grpcpp.h>
 // For both
 #include "helloworld.grpc.pb.h"
-#include "utils.h"
+#include "common/utils.h"
 
 // For server
 // Logic and data behind the server's behavior.

@@ -24,7 +24,7 @@ set(SRC ${SRC} ${PROTO_SRCS})
 
 # Include
 set(INC ${INC} "${CMAKE_CURRENT_SOURCE_DIR}")
-set(INC ${INC} "${CMAKE_CURRENT_SOURCE_DIR}/../utility")
+set(INC ${INC} "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 # App
 message(STATUS "INC ${INC}")
@@ -38,6 +38,13 @@ target_link_libraries(${APP} PRIVATE ${LIB})
 unset(APP)
 
 set(APP greeter_callback)
+add_executable(${APP} ${APP}.cpp)
+target_sources(${APP} PRIVATE ${SRC})
+target_include_directories(${APP} PRIVATE ${INC})
+target_link_libraries(${APP} PRIVATE ${LIB})
+unset(APP)
+
+set(APP greeter_async)
 add_executable(${APP} ${APP}.cpp)
 target_sources(${APP} PRIVATE ${SRC})
 target_include_directories(${APP} PRIVATE ${INC})

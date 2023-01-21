@@ -16,11 +16,13 @@
  *
  */
 
+#include <chrono>
 #include <condition_variable>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 
 // For Server
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
@@ -43,6 +45,7 @@ class GreeterServiceImpl final : public helloworld::Greeter::CallbackService
     {
         std::cout << "--" << std::endl;
         std::string prefix("Hello ");
+        std::this_thread::sleep_for(std::chrono::milliseconds(2806));
         reply->set_message(prefix + request->name());
         reply->set_order(++i);
         grpc::ServerUnaryReactor *reactor = context->DefaultReactor();

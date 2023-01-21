@@ -16,10 +16,10 @@
  *
  */
 
+#include <chrono>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <chrono>
 #include <thread>
 
 // For server
@@ -29,8 +29,8 @@
 // For client
 #include <grpcpp/grpcpp.h>
 // For both
-#include "helloworld.grpc.pb.h"
 #include "common/utils.h"
+#include "helloworld.grpc.pb.h"
 
 // For server
 // Logic and data behind the server's behavior.
@@ -114,7 +114,6 @@ class GreeterClient
   private:
     std::unique_ptr<helloworld::Greeter::Stub> stub_;
 };
-
 
 int main(int argc, char **argv)
 {

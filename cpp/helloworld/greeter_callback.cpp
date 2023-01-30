@@ -137,22 +137,21 @@ class GreeterClient
 // For both
 int main(int argc, char **argv)
 {
-    std::string server_address{"0.0.0.0:50051"};
-    Mode mode{Mode::CLIENT};
-    ParseCLIState cliState = ParseCommandLine(argc, argv, server_address, mode);
+    CliParams cli_params;
+    ParseCLIState cliState = ParseCommandLine(argc, argv, &cli_params);
     if (cliState == ParseCLIState::SUCCESS)
     {
 
-        if (mode == Mode::CLIENT)
+        if (cli_params.mode == Mode::CLIENT)
         {
-            GreeterClient greeter(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
+            GreeterClient greeter(grpc::CreateChannel(cli_params.server_address, grpc::InsecureChannelCredentials()));
             std::string user("world");
             std::string reply = greeter.SayHello(user);
             std::cout << "Greeter received: " << reply << std::endl;
         }
         else // SERVER
         {
-            RunServer(server_address);
+            RunServer(cli_params.server_address);
         }
 
         return 0;

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10.2)
 
-project(network LANGUAGES CXX)
+project(route_guide LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 
 # Find Protobuf installation
@@ -17,7 +17,6 @@ message(STATUS "Using gRPC ${gRPC_VERSION}")
 set(LIB ${LIB} gRPC::grpc++_reflection)
 set(LIB ${LIB} gRPC::grpc++)
 
-
 set(INC ${INC} "${CMAKE_CURRENT_SOURCE_DIR}/../../protoc/")
 file(GLOB PROTO_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/../../protoc/*.cc")
 set(SRC ${SRC} ${PROTO_SRCS})
@@ -29,31 +28,11 @@ set(INC ${INC} "${CMAKE_CURRENT_SOURCE_DIR}/..")
 # App
 message(STATUS "INC ${INC}")
 message(STATUS "LIB ${LIB}")
+set(SRC ${SRC} helper.cpp)
 
-set(APP greeter)
+set(APP route_guide)
 add_executable(${APP} ${APP}.cpp)
 target_sources(${APP} PRIVATE ${SRC})
 target_include_directories(${APP} PRIVATE ${INC})
 target_link_libraries(${APP} PRIVATE ${LIB})
 unset(APP)
-
-set(APP greeter_callback)
-add_executable(${APP} ${APP}.cpp)
-target_sources(${APP} PRIVATE ${SRC})
-target_include_directories(${APP} PRIVATE ${INC})
-target_link_libraries(${APP} PRIVATE ${LIB})
-unset(APP)
-
-set(APP greeter_async)
-add_executable(${APP} ${APP}.cpp)
-target_sources(${APP} PRIVATE ${SRC})
-target_include_directories(${APP} PRIVATE ${INC})
-target_link_libraries(${APP} PRIVATE ${LIB})
-unset(APP)
-
-# set(APP xds_greeter)
-# add_executable(${APP} ${APP}.cpp)
-# target_sources(${APP} PRIVATE ${SRC})
-# target_include_directories(${APP} PRIVATE ${INC})
-# target_link_libraries(${APP} PRIVATE ${LIB})
-# unset(APP)

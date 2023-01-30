@@ -29,7 +29,7 @@
 #include "common/utils.h"
 #include "helloworld.grpc.pb.h"
 
-#define CLIENT_V1
+#define CLIENT_V2
 
 // For Server
 class ServerImpl final
@@ -332,32 +332,31 @@ class GreeterClient2
 // For both
 int main(int argc, char **argv)
 {
-    std::string server_address{"0.0.0.0:50051"};
-    Mode mode{Mode::CLIENT};
-    ParseCLIState cliState = ParseCommandLine(argc, argv, server_address, mode);
+    CliParams cli_params;
+    ParseCLIState cliState = ParseCommandLine(argc, argv, &cli_params);
     if (cliState == ParseCLIState::SUCCESS)
     {
 #ifdef CLIENT_V1
-        if (mode == Mode::CLIENT)
+        if (cli_params.mode == Mode::CLIENT)
         {
             // Instantiate the client. It requires a channel, out of which the actual RPCs
             // are created. This channel models a connection to an endpoint (in this case,
             // localhost at port 50051). We indicate that the channel isn't authenticated
             // (use of InsecureChannelCredentials()).
-            GreeterClient greeter(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
+            GreeterClient greeter(grpc::CreateChannel(cli_params.server_address, grpc::InsecureChannelCredentials()));
             std::string user("world");
             std::string reply = greeter.SayHello(user); // The actual RPC call!
             std::cout << "Greeter received: " << reply << std::endl;
         }
 #endif // CLIENT_V1
 #ifdef CLIENT_V2
-        if (mode == Mode::CLIENT)
+        if (cli_params.mode == Mode::CLIENT)
         {
             // Instantiate the client. It requires a channel, out of which the actual RPCs
             // are created. This channel models a connection to an endpoint (in this case,
             // localhost at port 50051). We indicate that the channel isn't authenticated
             // (use of InsecureChannelCredentials()).
-            GreeterClient2 greeter2(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
+            GreeterClient2 greeter2(grpc::CreateChannel(cli_params.server_address, grpc::InsecureChannelCredentials()));
 
             // Spawn reader thread that loops indefinitely
             std::thread thread_ = std::thread(&GreeterClient2::AsyncCompleteRpc, &greeter2);
@@ -375,7 +374,7 @@ int main(int argc, char **argv)
         else // SERVER
         {
             ServerImpl server;
-            server.Run(server_address);
+            server.Run(cli_params.server_address);
         }
 
         return 0;

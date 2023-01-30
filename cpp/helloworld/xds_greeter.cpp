@@ -24,6 +24,7 @@
 // For Server
 #include "absl/strings/str_cat.h"
 #include <grpcpp/ext/admin_services.h>
+#include <grpcpp/security/alts_util.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
 #include <grpcpp/xds_server_builder.h>
@@ -36,24 +37,25 @@
 
 // For Server
 // Logic and data behind the server's behavior.
-class GreeterServiceImpl final : public Greeter::Service
+class GreeterServiceImpl final : public helloworld::Greeter::Service
 {
-    Status SayHello(ServerContext *context, const HelloRequest *request, HelloReply *reply) override
+    grpc::Status SayHello(grpc::ServerContext *context, const helloworld::HelloRequest *request,
+                          helloworld::HelloReply *reply) override
     {
         std::string prefix("Hello ");
         reply->set_message(prefix + request->name());
-        return Status::OK;
+        return grpc::Status::OK;
     }
 };
 
-void RunServer(int port = 50051, int maintenance_port = 50052, bool FLAGS_secure = true, )
+void RunServer(std::string &server_address, std::string &maintenance_address, bool FLAGS_secure = true)
 {
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
     grpc::XdsServerBuilder xds_builder;
-    ServerBuilder builder;
-    std::unique_ptr<Server> xds_enabled_server;
-    std::unique_ptr<Server> server;
+    grpc::ServerBuilder builder;
+    std::unique_ptr<grpc::Server> xds_enabled_server;
+    std::unique_ptr<grpc::Server> server;
     GreeterServiceImpl service;
     // Register "service" as the instance through which we'll communicate with
     // clients. In this case it corresponds to an *synchronous* service.
@@ -62,25 +64,22 @@ void RunServer(int port = 50051, int maintenance_port = 50052, bool FLAGS_secure
     {
         // Listen on the given address with XdsServerCredentials and a fallback of
         // InsecureServerCredentials
-        std::string server_address = ;
-        xds_builder.AddListeningPort(std::string("0.0.0.0") + std::to_string(port),
-                                     grpc::XdsServerCredentials(grpc::InsecureServerCredentials()));
+        xds_builder.AddListeningPort(server_address, grpc::XdsServerCredentials(grpc::InsecureServerCredentials()));
         xds_enabled_server = xds_builder.BuildAndStart();
-        gpr_log(GPR_INFO, "Server starting on 0.0.0.0:%d", port);
+        gpr_log(GPR_INFO, (std::string("Server starting on ") + server_address).c_str());
         grpc::AddAdminServices(&builder);
         // For the maintenance server, do not use any authentication mechanism.
-        builder.AddListeningPort(std::string("0.0.0.0") + std::to_string(maintenance_port),
-                                 grpc::InsecureServerCredentials());
+        builder.AddListeningPort(maintenance_address, grpc::InsecureServerCredentials());
         server = builder.BuildAndStart();
-        gpr_log(GPR_INFO, "Maintenance server listening on 0.0.0.0:%d", maintenance_port);
+        gpr_log(GPR_INFO, (std::string("Maintenance server listening on ") + maintenance_address).c_str());
     }
     else
     {
         grpc::AddAdminServices(&xds_builder);
         // Listen on the given address without any authentication mechanism.
-        builder.AddListeningPort(std::string("0.0.0.0") + std::to_string(port), grpc::InsecureServerCredentials());
+        builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
         server = xds_builder.BuildAndStart();
-        gpr_log(GPR_INFO, "Server listening on 0.0.0.0:%d", port);
+        gpr_log(GPR_INFO, (std::string("Server listening on ") + server_address).c_str());
     }
 
     // Wait for the server to shutdown. Note that some other thread must be
@@ -92,7 +91,7 @@ void RunServer(int port = 50051, int maintenance_port = 50052, bool FLAGS_secure
 class GreeterClient
 {
   public:
-    GreeterClient(std::shared_ptr<Channel> channel) : stub_(Greeter::NewStub(channel))
+    GreeterClient(std::shared_ptr<grpc::Channel> channel) : stub_(helloworld::Greeter::NewStub(channel))
     {
     }
 
@@ -101,18 +100,18 @@ class GreeterClient
     std::string SayHello(const std::string &user)
     {
         // Data we are sending to the server.
-        HelloRequest request;
+        helloworld::HelloRequest request;
         request.set_name(user);
 
         // Container for the data we expect from the server.
-        HelloReply reply;
+        helloworld::HelloReply reply;
 
         // Context for the client. It could be used to convey extra information to
         // the server and/or tweak certain RPC behaviors.
-        ClientContext context;
+        grpc::ClientContext context;
 
         // The actual RPC.
-        Status status = stub_->SayHello(&context, request, &reply);
+        grpc::Status status = stub_->SayHello(&context, request, &reply);
 
         // Act upon its status.
         if (status.ok())
@@ -127,34 +126,37 @@ class GreeterClient
     }
 
   private:
-    std::unique_ptr<Greeter::Stub> stub_;
+    std::unique_ptr<helloworld::Greeter::Stub> stub_;
 };
 
 // For both
 int main(int argc, char **argv)
 {
-    std::string server_address{"0.0.0.0:50051"};
-    Mode mode{Mode::CLIENT};
-    ParseCLIState cliState = ParseCommandLine(argc, argv, server_address, mode);
+    CliParams cli_params;
+    ParseCLIState cliState = ParseCommandLine(argc, argv, &cli_params);
     if (cliState == ParseCLIState::SUCCESS)
     {
-        if (mode == Mode::SERVER)
+        if (cli_params.mode == Mode::SERVER)
         {
-            RunServer(50051, 50052, true);
+            RunServer(cli_params.server_address, cli_params.maintenance_address, cli_params.secure);
         }
         else
         {
-            assert(mode == Mode::CLIENT);
-            GreeterClient greeter(grpc::CreateChannel(absl::GetFlag(FLAGS_target),
-                                                      absl::GetFlag(FLAGS_secure)
-                                                          ? grpc::XdsCredentials(grpc::InsecureChannelCredentials())
-                                                          : grpc::InsecureChannelCredentials()));
+            assert(cli_params.mode == Mode::CLIENT);
+            GreeterClient greeter(grpc::CreateChannel(
+                cli_params.server_address, cli_params.secure ? grpc::XdsCredentials(grpc::InsecureChannelCredentials())
+                                                             : grpc::InsecureChannelCredentials()));
             std::string user("world");
             std::string reply = greeter.SayHello(user);
             std::cout << "Greeter received: " << reply << std::endl;
             return 0;
         }
-        else if (cliState == ParseCLIState::SHOW_HELP) return 0;
-        else return 1;
     }
+    else if (cliState == ParseCLIState::SHOW_HELP)
+        return 0;
+    else
+        return 1;
 }
+
+// ./xds_greeter -c --server_address "xds:///helloworld:50051" --secure
+// ./xds_greeter -s --server_address "xds:///helloworld:50051" --secure

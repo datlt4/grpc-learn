@@ -24,9 +24,9 @@
 // For Server
 #include "absl/strings/str_cat.h"
 #include <grpcpp/ext/admin_services.h>
-#include <grpcpp/security/alts_util.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/health_check_service_interface.h>
+#include <grpcpp/security/alts_util.h>
 #include <grpcpp/xds_server_builder.h>
 // For Client
 

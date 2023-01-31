@@ -164,7 +164,7 @@ find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --pl
         - a remote interface type (or stub) for clients to call with the methods defined in the `RouteGuide` service.
         - two abstract interfaces for servers to implement, also with the methods defined in the `RouteGuide` service.
 
-#### C++ code example
+#### C++ Synchronous API example
 
 ##### [Creating the server](https://grpc.io/docs/languages/cpp/basics/#server)
 
@@ -406,6 +406,72 @@ find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --pl
     ```
 
 - The syntax for reading and writing here is exactly the same as for our client-streaming and server-streaming methods. Although each side will always get the other’s messages in the order they were written, both the client and server can read and write in any order — the streams operate completely independently.
+
+#### [C++ Callback-based Asynchronous API example](https://github.com/grpc/proposal/blob/master/L67-cpp-callback-api.md#proposal)
+
+- The callback API is designed to have the performance and thread scalability of an asynchronous API without the burdensome programming model of the completion-queue-based model. In particular, the following are fundamental guiding principles of the API:
+
+    - Library directly **_calls user-specified code at the completion of RPC actions_**. This user code is run from the library's own threads, so it is very important that it **_must not wait for completion_** of any blocking operations (e.g., condition variable waits, invoking synchronous RPCs, blocking file I/O).
+    - No explicit polling required for notification of completion of RPC actions.
+    - Like the synchronous API and unlike the completion-queue-based asynchronous API, there is no need for the application to "request" new server RPCs. Server RPC context structures will be allocated and have their resources allocated as and when RPCs arrive at the server.
+
+##### [Reactor model](https://github.com/grpc/proposal/blob/master/L67-cpp-callback-api.md#reactor-model)
+
+- The most general form of the callback API is built around a _**reactor**_ model. Each type of RPC has a reactor base class provided by the library. These types are:
+
+    - `ClientUnaryReactor` and `ServerUnaryReactor` for unary RPCs
+    - `ClientBidiReactor` and `ServerBidiReactor` for bidi-streaming RPCs
+    - `ClientReadReactor` and `ServerWriteReactor` for server-streaming RPCs
+    - `ClientWriteReactor` and `ServerReadReactor` for client-streaming RPCs
+
+- Client RPC invocations from a stub provide a reactor pointer as one of their arguments, and the method handler of a server RPC must return a reactor pointer.
+
+<details>
+    <summary>Click to expand</summary>
+    
+- These base classes provide three types of methods:
+
+    1. Operation-initiation methods: start an asynchronous activity in the RPC. These are methods provided by the class and are not virtual. These are invoked by the application logic. All of these have a `void` return type. The `ReadMessageType` below is the request type for a server RPC and the response type for a client RPC; the `WriteMessageType` is the response type for a server RPC or the request type for a client RPC.
+
+        - `void StartCall()`: _(Client only)_ Initiates the operations of a call from the client, including sending any client-side initial metadata associated with the RPC. Must be called exactly once. No reads or writes will actually be started until this is called (i.e., any previous calls to `StartRead`, `StartWrite`, or `StartWritesDone` will be queued until `StartCall` is invoked). This operation is not needed at the server side since streaming operations at the server are released from backlog automatically by the library as soon as the application returns a reactor from the method handler, and because there is a separate method just for sending initial metadata.
+
+        - `void StartSendInitialMetadata()`: _(Server only)_ Sends server-side initial metadata. To be used in cases where initial metadata should be sent without sending a message. Optional; if not called, initial metadata will be sent when `StartWrite` or `Finish` is called. May not be invoked more than once or after `StartWrite` or `Finish` has been called. This does not exist at the client because sending initial metadata is part of `StartCall`.
+
+        - `void StartRead(ReadMessageType*)`: Starts a read of a message into the object pointed to by the argument. `OnReadDone` will be invoked when the read is complete. Only one read may be outstanding at any given time for an RPC (though a read and a write can be concurrent with each other). If this operation is invoked by a client before calling `StartCall` or by a server before returning from the method handler, it will be queued until one of those events happens and will not actually trigger any activity or reactions until it is thereby released from the queue.
+
+        - `void StartWrite(const WriteMessageType*)`: Starts a write of the object pointed to by the argument. `OnWriteDone` will be invoked when the write is complete. Only one write may be outstanding at any given time for an RPC (though a read and a write can be concurrent with each other). As with `StartRead`, if this operation is invoked by a client before calling `StartCall` or by a server before returning from the method handler, it will be queued until one of those events happens and will not actually trigger any activity or reactions until it is thereby released from the queue.
+
+        - `void StartWritesDone()`: _(Client only)_ For client RPCs to indicate that there are no more writes coming in this stream. `OnWritesDoneDone` will be invoked when this operation is complete. This causes future read operations on the server RPC to indicate that there is no more data available. Highly recommended but technically optional; may not be called more than once per call. As with `StartRead` and `StartWrite`, if this operation is invoked by a client before calling `StartCall` or by a server before returning from the method handler, it will be queued until one of those events happens and will not actually trigger any activity or reactions until it is thereby released from the queue.
+
+        - void `Finish(Status)`: _(Server only)_ Sends completion status to the client, asynchronously. Must be called exactly once for all server RPCs, even for those that have already been cancelled. No further operation-initiation methods may be invoked after `Finish`.
+
+    2. Operation-completion reaction methods: notification of completion of asynchronous RPC activity. These are all virtual methods that default to an empty function (i.e., `{}`) but may be overridden by the application's reactor definition. These are invoked by the library. All of these have a `void` return type. Most take a `bool ok` argument to indicate whether the operation completed "normally," as explained below.
+
+        - `void OnReadInitialMetadataDone(bool ok)`: _(Client only)_ Invoked by the library to notify that the server has sent an initial metadata response to a client RPC. If `ok` is true, then the RPC received initial metadata normally. If it is false, there is no initial metadata either because the call has failed or because the call received a trailers-only response (which means that there was no actual message and that any information normally sent in initial metadata has been dispatched instead to trailing metadata, which is allowed in the gRPC HTTP/2 transport protocol). This reaction is automatically invoked by the library for RPCs of all varieties; it is uncommonly used as an application-defined reaction however.
+
+        - `void OnReadDone(bool ok)`: Invoked by the library in response to a `StartRead` operation. The `ok` argument indicates whether a message was read as expected. A false `ok` could mean a failed RPC (e.g., cancellation) or a case where no data is possible because the other side has already ended its writes (e.g., seen at the server-side after the client has called `StartWritesDone`).
+
+        - `void OnWriteDone(bool ok)`: Invoked by the library in response to a `StartWrite` operation. The `ok` argument that indicates whether the write was successfully sent; a false value indicates an RPC failure.
+
+        - `void OnWritesDoneDone(bool ok)`: _(Client only)_ Invoked by the library in response to a `StartWritesDone` operation. The bool `ok` argument that indicates whether the writes-done operation was successfully completed; a false value indicates an RPC failure.
+
+        - `void OnCancel()`: _(Server only)_ Invoked by the library if an RPC is canceled before it has a chance to successfully send status to the client side. The reaction may be used for any cleanup associated with cancellation or to guide the behavior of other parts of the system (e.g., by setting a flag in the service logic associated with this RPC to stop further processing since the RPC won't be able to send outbound data anyway). Note that servers must call `Finish` even for RPCs that have already been canceled as this is required to cleanup all their library state and move them to a state that allows for calling `OnDone`.
+
+        - `void OnDone(const Status&)` at the client, `void OnDone()` at the server: Invoked by the library when all outstanding and required RPC operations are completed for a given RPC. For the client-side, it additionally provides the status of the RPC (either as sent by the server with its `Finish` call or as provided by the library to indicate a failure), in which case the signature is `void OnDone(const Status&)`. The server version has no argument, and thus has a signature of `void OnDone()`. Should be used for any application-level RPC-specific cleanup.
+
+        - **_Thread safety_**: the above calls may take place concurrently, except that `OnDone` will always take place after all other reactions. No further RPC operations are permitted to be issued after `OnDone` is invoked.
+
+        - **IMPORTANT USAGE NOTE** : code in any reaction must not block for an arbitrary amount of time since reactions are executed on a finite-sized, library-controlled threadpool. If any long-term blocking operations (like sleeps, file I/O, synchronous RPCs, or waiting on a condition variable) must be invoked as part of the application logic, then it is important to push that outside the reaction so that the reaction can complete in a timely fashion. One way of doing this is to push that code to a separate application-controlled thread.
+
+    3. RPC completion-prevention methods. These are methods provided by the class and are not virtual. They are only present at the client-side because the completion of a server RPC is clearly requested when the application invokes `Finish`. These methods are invoked by the application logic. All of these have a `void` return type.
+
+        - `void AddHold()`: _(Client only)_ This prevents the RPC from being considered complete (ready for `OnDone`) until each `AddHold` on an RPC's reactor is matched to a corresponding `RemoveHold`. An application uses this operation before it performs any extra-reaction flows, which refers to streaming operations initiated from outside a reaction method. Note that an RPC cannot complete before `StartCall`, so holds are not needed for any extra-reaction flows that take place before `StartCall`. As long as there are any holds present on an RPC, though, it may not have `OnDone` called on it, even if it has already received server status and has no other operations outstanding. May be called 0 or more times on any client RPC.
+
+        - `void AddMultipleHolds(int holds)`: _(Client only)_ Shorthand for holds invocations of `AddHold`.
+
+        - `void RemoveHold()`: _(Client only)_ Removes a hold reference on this client RPC. Must be called exactly as many times as `AddHold` was called on the RPC, and may not be called more times than `AddHold` has been called so far for any RPC. Once all holds have been removed, the server has provided status, and all outstanding or required operations have completed for an RPC, the library will invoke `OnDone` for that RPC.
+
+</details>
 
 #### Format C++ code
 

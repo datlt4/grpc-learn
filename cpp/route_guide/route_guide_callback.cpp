@@ -99,7 +99,7 @@ class RouteGuideImpl final : public routeguide::RouteGuide::CallbackService
     {
         feature->set_name(GetFeatureName(*point, feature_list_));
         feature->mutable_location()->CopyFrom(*point);
-        auto *reactor = context->DefaultReactor();
+        grpc::ServerUnaryReactor *reactor = context->DefaultReactor();
         reactor->Finish(grpc::Status::OK);
         return reactor;
     }
@@ -369,9 +369,13 @@ class RouteGuideClient
             {
                 if (ok)
                 {
-                    std::cout << "Found feature called " << feature_.name() << " at "
-                              << feature_.location().latitude() / coord_factor_ << ", "
-                              << feature_.location().longitude() / coord_factor_ << std::endl;
+                    if (feature_.name().empty())
+                        std::cout << "Found feature at " << feature_.location().latitude() / coord_factor_ << ", "
+                                  << feature_.location().longitude() / coord_factor_ << std::endl;
+                    else
+                        std::cout << "Found feature called " << feature_.name() << " at "
+                                  << feature_.location().latitude() / coord_factor_ << ", "
+                                  << feature_.location().longitude() / coord_factor_ << std::endl;
                     StartRead(&feature_);
                 }
             }

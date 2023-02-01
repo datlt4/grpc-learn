@@ -175,6 +175,9 @@ find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --pl
 
 1. [Implementing RouteGuide](https://grpc.io/docs/languages/cpp/basics/#implementing-routeguide)
 
+<details>
+  <summary>Click to expand</summary>
+
 - As you can see, our server has a `RouteGuideImpl` class that implements the generated `RouteGuide::Service` interface. `RouteGuideImpl` implements all our service methods.
 
     ```cpp
@@ -268,7 +271,12 @@ find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --pl
 
 - Note that since `received_notes_` is an instance variable and can be accessed by multiple threads, we use a mutex lock here to guarantee exclusive access.
 
+</details>
+
 2. [Starting the server](https://grpc.io/docs/languages/cpp/basics/#starting-the-server)
+
+<details>
+  <summary>Click to expand</summary>
 
 - Once we’ve implemented all our methods, we also need to start up a gRPC server so that clients can actually use our service. The following snippet shows how we do this for our `RouteGuide` service:
 
@@ -296,9 +304,14 @@ find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --pl
     - Call `BuildAndStart()` on the builder to create and start an RPC server for our service.
     - Call `Wait()` on the server to do a blocking wait until process is killed or `Shutdown()` is called.
 
+</details>
+
 ##### [Creating the client](https://grpc.io/docs/languages/cpp/basics/#client)
 
 1. [Creating a stub](https://grpc.io/docs/languages/cpp/basics/#creating-a-stub)
+
+<details>
+  <summary>Click to expand</summary>
 
 - To call service methods, we first need to create a stub.
 
@@ -319,7 +332,13 @@ find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --pl
         }
     ```
 
+</details>
+
+
 2. [Calling service methods](https://grpc.io/docs/languages/cpp/basics/#calling-service-methods)
+
+<details>
+  <summary>Click to expand</summary>
 
 - Now let’s look at how we call our service methods. Note that in this tutorial we’re calling the _**blocking/synchronous**_ versions of each method: this means that the RPC call waits for the server to respond, and will either return a response or raise an exception.
 
@@ -406,6 +425,8 @@ find . -name "*.proto" -type f -exec protoc -I=./protoc --grpc_out=./protoc --pl
     ```
 
 - The syntax for reading and writing here is exactly the same as for our client-streaming and server-streaming methods. Although each side will always get the other’s messages in the order they were written, both the client and server can read and write in any order — the streams operate completely independently.
+
+</details>
 
 #### [C++ Callback-based Asynchronous API example](https://github.com/grpc/proposal/blob/master/L67-cpp-callback-api.md#proposal)
 
